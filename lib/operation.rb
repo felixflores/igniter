@@ -3,12 +3,16 @@
 class Operation
   class FailStep < StandardError; end
 
-  def self.lane(lane_index, method, switch: nil)
+  def self.lane(lane_index, method, failure: nil, success: nil)
     @lanes ||= []
     @step_count ||= 0
 
     @lanes[lane_index] ||= []
-    @lanes[lane_index][@step_count] = { method: method, switch: switch }
+    @lanes[lane_index][@step_count] = {
+      method: method,
+      success: success,
+      failure: failure
+    }
 
     @step_count += 1
     @lanes
@@ -30,13 +34,10 @@ class Operation
     current_step = lanes[lane_index][step_index]
 
     begin
-      if current_step
-        send(current_step[:method], options)
-      end
-
-      run(options, lane_index, step_index + 1)
+      send(current_step[:method], options) if current_step
+      run(options, current_step.try(:[], :success) || lane_index, step_index + 1)
     rescue FailStep
-      next_lane_index = current_step[:switch] || lane_index + 1
+      next_lane_index = current_step[:failure] || lane_index + 1
       run(options, next_lane_index, step_index + 1)
     end
   end
